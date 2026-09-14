@@ -496,6 +496,7 @@ cp_statx(const struct path *path, struct kstat *stat,
 		    struct statx __user *buffer, u32 request_mask)
 {
 	struct statx tmp;
+    struct mount *m;
 
 	memset(&tmp, 0, sizeof(tmp));
 
@@ -524,6 +525,12 @@ cp_statx(const struct path *path, struct kstat *stat,
 	tmp.stx_rdev_minor = MINOR(stat->rdev);
 	tmp.stx_dev_major = MAJOR(stat->dev);
 	tmp.stx_dev_minor = MINOR(stat->dev);
+
+    /* populate stx_mount_id path directly via real_mount */
+    if (path && path->mnt) {
+		m = real_mount(path->mnt);
+		tmp.stx_mnt_id = (u64)m->mnt_id;
+		tmp.stx_mask |= STATX_MNT_ID;
 
 	return copy_to_user(buffer, &tmp, sizeof(tmp)) ? -EFAULT : 0;
 }
