@@ -493,8 +493,7 @@ void inode_set_bytes(struct inode *inode, loff_t bytes)
 
 EXPORT_SYMBOL(inode_set_bytes);
 
-static noinline_for_stack int
-cp_statx(const struct path *path, struct kstat *stat,
+static int cp_statx(const struct path *path, struct kstat *stat,
 		    struct statx __user *buffer, u32 request_mask)
 {
 	struct statx tmp;
