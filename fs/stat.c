@@ -18,6 +18,8 @@
 #include <asm/uaccess.h>
 #include <asm/unistd.h>
 
+#include "mount.h"
+
 void generic_fillattr(struct inode *inode, struct kstat *stat)
 {
 	stat->dev = inode->i_sb->s_dev;
@@ -500,7 +502,7 @@ cp_statx(const struct path *path, struct kstat *stat,
 
 	memset(&tmp, 0, sizeof(tmp));
 
-	tmp.stx_mask = STATX_BASIC_STATS
+	tmp.stx_mask = STATX_BASIC_STATS;
 
 	tmp.stx_blksize = stat->blksize;
 	tmp.stx_nlink = stat->nlink;
@@ -510,7 +512,6 @@ cp_statx(const struct path *path, struct kstat *stat,
 	tmp.stx_ino = stat->ino;
 	tmp.stx_size = stat->size;
 	tmp.stx_blocks = stat->blocks;
-	tmp.stx_attributes_mask = stat->attributes_mask;
 	tmp.stx_atime.tv_sec = stat->atime.tv_sec;
 	tmp.stx_atime.tv_nsec = stat->atime.tv_nsec;
 
@@ -542,7 +543,7 @@ cp_statx(const struct path *path, struct kstat *stat,
     tmp.stx_attributes_mask = STATX_ATTR_MOUNT_ROOT | STATX_ATTR_AUTOMOUNT;
 
     /* check if path requires automounting */
-    if (path && path->dentry && path->dentry->d_flags & DCACHE_NEED_AUTOMOUNT
+    if (path && path->dentry && path->dentry->d_flags & DCACHE_NEED_AUTOMOUNT)
         tmp.stx_attributes |= STATX_ATTR_AUTOMOUNT;
 
 	return copy_to_user(buffer, &tmp, sizeof(tmp)) ? -EFAULT : 0;
