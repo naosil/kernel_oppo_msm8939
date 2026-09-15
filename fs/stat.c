@@ -532,6 +532,19 @@ cp_statx(const struct path *path, struct kstat *stat,
 		tmp.stx_mnt_id = (u64)m->mnt_id;
 		tmp.stx_mask |= STATX_MNT_ID;
 
+
+    /* check if path is the root of a mount point */
+    if (path->dentry == path->mnt->mnt_root)
+        tmp.stx_attributes |= STATX_ATTR_MOUNT_ROOT;
+}
+
+    /* declare supported attributes to userspace */ 
+    tmp.stx_attributes_mask = STATX_ATTR_MOUNT_ROOT | STATX_ATTR_AUTOMOUNT;
+
+    /* check if path requires automounting */
+    if (path && path->dentry && path->dentry->d_flags & DCACHE_NEED_AUTOMOUNT
+        tmp.stx_attributes |= STATX_ATTR_AUTOMOUNT;
+
 	return copy_to_user(buffer, &tmp, sizeof(tmp)) ? -EFAULT : 0;
 }
 
