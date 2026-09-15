@@ -548,69 +548,70 @@ cp_statx(const struct path *path, struct kstat *stat,
 	return copy_to_user(buffer, &tmp, sizeof(tmp)) ? -EFAULT : 0;
 }
 
-/**
- * sys_statx - System call to get enhanced stats
- * @dfd: Base directory to pathwalk from *or* fd to stat.
- * @filename: File to stat or "" with AT_EMPTY_PATH
- * @flags: AT_* flags to control pathwalk.
- * @mask: Parts of statx struct actually required.
- * @buffer: Result buffer.
- *
- * Note that fstat() can be emulated by setting dfd to the fd of interest,
- * supplying "" as the filename and setting AT_EMPTY_PATH in the flags.
+/*
+ * statx system call 
+ * 
+ * Provides enhanced file and rebase stats required by modern userspace
+ * This syscall handles flag validation, AT_EMPTY_PATH fast routing,
+ * and passes the attributes to cp_statx
  */
+ 
 SYSCALL_DEFINE5(statx,
-		int, dfd, const char __user *, filename, unsigned, flags,
-		unsigned int, mask,
-		struct statx __user *, buffer)
+        int, dfd,
+        const char __user *, filename,
+        unsigned int, flags,
+        unsigned int, mask,
+        struct statx __user *, buffer)
 {
-	struct kstat stat;
-	int error;
+    struct kstat stat;
+    struct path path;
+    int error;
+    unsigned int lookup_flags = 0;
 
-	if (mask & STATX__RESERVED)
-		return -EINVAL;
-	if ((flags & AT_STATX_SYNC_TYPE) == AT_STATX_SYNC_TYPE)
-		return -EINVAL;
+    /* reject invalid or unsupported flags */
+    if (flags & ~(AT_SYMLINK_NOFOLLOW | AT_NO_AUTOMOUNT | AT_EMPTY_PATH |
+                  AT_STATX_SYNC_TYPE))
+        return -EINVAL;
 
-	error = vfs_statx(dfd, filename, flags, &stat, mask);
-	if (error)
-		return error;
+    /* fast path: If filename is empty, use the file descriptor (dfd) directly */
+    if ((flags & AT_EMPTY_PATH) && strnlen_user(filename, 1) <= 1) {
+        struct fd f = fdget_raw(dfd);
 
-	return cp_statx(&stat, buffer);
-}
+        if (!f.file)
+            return -EBADF;
 
-#ifdef CONFIG_COMPAT
-static int cp_compat_stat(struct kstat *stat, struct compat_stat __user *ubuf)
-{
-	struct compat_stat tmp;
+        error = vfs_getattr(&f.file->f_path, &stat);
+        if (!error)
+            error = cp_statx(&f.file->f_path, &stat, buffer, mask);
 
-	if (sizeof(tmp.st_dev) < 4 && !old_valid_dev(stat->dev))
-		return -EOVERFLOW;
-	if (sizeof(tmp.st_rdev) < 4 && !old_valid_dev(stat->rdev))
-		return -EOVERFLOW;
+        fdput(f);
+        return error;
+    }
 
-	memset(&tmp, 0, sizeof(tmp));
-	tmp.st_dev = new_encode_dev(stat->dev);
-	tmp.st_ino = stat->ino;
-	if (sizeof(tmp.st_ino) < sizeof(stat->ino) && tmp.st_ino != stat->ino)
-		return -EOVERFLOW;
-	tmp.st_mode = stat->mode;
-	tmp.st_nlink = stat->nlink;
-	if (tmp.st_nlink != stat->nlink)
-		return -EOVERFLOW;
-	SET_UID(tmp.st_uid, from_kuid_munged(current_user_ns(), stat->uid));
-	SET_GID(tmp.st_gid, from_kgid_munged(current_user_ns(), stat->gid));
-	tmp.st_rdev = new_encode_dev(stat->rdev);
-	if ((u64) stat->size > MAX_NON_LFS)
-		return -EOVERFLOW;
-	tmp.st_size = stat->size;
-	tmp.st_atime = stat->atime.tv_sec;
-	tmp.st_atime_nsec = stat->atime.tv_nsec;
-	tmp.st_mtime = stat->mtime.tv_sec;
-	tmp.st_mtime_nsec = stat->mtime.tv_nsec;
-	tmp.st_ctime = stat->ctime.tv_sec;
-	tmp.st_ctime_nsec = stat->ctime.tv_nsec;
-	tmp.st_blocks = stat->blocks;
-	tmp.st_blksize = stat->blksize;
-	return copy_to_user(ubuf, &tmp, sizeof(tmp)) ? -EFAULT : 0;
+    /* translate statx flags to internal lookup flags */
+    if (!(flags & AT_SYMLINK_NOFOLLOW))
+        lookup_flags |= LOOKUP_FOLLOW;
+
+    if (flags & AT_EMPTY_PATH)
+        lookup_flags |= LOOKUP_EMPTY;
+
+    /* path lookup and stat extraction (with retry loop) */
+retry:
+    error = user_path_at(dfd, filename, lookup_flags, &path);
+    if (error)
+        return error;
+
+    error = vfs_getattr(&path, &stat);
+    if (!error)
+        error = cp_statx(&path, &stat, buffer, mask);
+
+    path_put(&path);
+
+    /* retry if the file handle is stale */
+    if (retry_estale(error, lookup_flags)) {
+        lookup_flags |= LOOKUP_REVAL;
+        goto retry;
+    }
+
+    return error;
 }
