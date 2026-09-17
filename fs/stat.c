@@ -18,6 +18,8 @@
 #include <asm/uaccess.h>
 #include <asm/unistd.h>
 
+#include "mount.h"
+
 void generic_fillattr(struct inode *inode, struct kstat *stat)
 {
 	stat->dev = inode->i_sb->s_dev;
@@ -490,3 +492,126 @@ void inode_set_bytes(struct inode *inode, loff_t bytes)
 }
 
 EXPORT_SYMBOL(inode_set_bytes);
+
+static int cp_statx(const struct path *path, struct kstat *stat,
+		    struct statx __user *buffer, u32 request_mask)
+{
+	struct statx tmp;
+    struct mount *m;
+
+	memset(&tmp, 0, sizeof(tmp));
+
+	tmp.stx_mask = STATX_BASIC_STATS;
+
+	tmp.stx_blksize = stat->blksize;
+	tmp.stx_nlink = stat->nlink;
+	tmp.stx_uid = from_kuid_munged(current_user_ns(), stat->uid);
+	tmp.stx_gid = from_kgid_munged(current_user_ns(), stat->gid);
+	tmp.stx_mode = stat->mode;
+	tmp.stx_ino = stat->ino;
+	tmp.stx_size = stat->size;
+	tmp.stx_blocks = stat->blocks;
+	tmp.stx_atime.tv_sec = stat->atime.tv_sec;
+	tmp.stx_atime.tv_nsec = stat->atime.tv_nsec;
+
+	tmp.stx_btime.tv_sec = 0;
+	tmp.stx_btime.tv_nsec = 0;
+
+	tmp.stx_ctime.tv_sec = stat->ctime.tv_sec;
+	tmp.stx_ctime.tv_nsec = stat->ctime.tv_nsec;
+	tmp.stx_mtime.tv_sec = stat->mtime.tv_sec;
+	tmp.stx_mtime.tv_nsec = stat->mtime.tv_nsec;
+	tmp.stx_rdev_major = MAJOR(stat->rdev);
+	tmp.stx_rdev_minor = MINOR(stat->rdev);
+	tmp.stx_dev_major = MAJOR(stat->dev);
+	tmp.stx_dev_minor = MINOR(stat->dev);
+
+    /* populate stx_mount_id path directly via real_mount */
+    if (path && path->mnt) {
+		m = real_mount(path->mnt);
+		tmp.stx_mnt_id = (u64)m->mnt_id;
+		tmp.stx_mask |= STATX_MNT_ID;
+
+
+    /* check if path is the root of a mount point */
+    if (path->dentry == path->mnt->mnt_root)
+        tmp.stx_attributes |= STATX_ATTR_MOUNT_ROOT;
+}
+
+    /* declare supported attributes to userspace */ 
+    tmp.stx_attributes_mask = STATX_ATTR_MOUNT_ROOT | STATX_ATTR_AUTOMOUNT;
+
+    /* check if path requires automounting */
+    if (path && path->dentry && path->dentry->d_flags & DCACHE_NEED_AUTOMOUNT)
+        tmp.stx_attributes |= STATX_ATTR_AUTOMOUNT;
+
+	return copy_to_user(buffer, &tmp, sizeof(tmp)) ? -EFAULT : 0;
+}
+
+/*
+ * statx system call 
+ * 
+ * Provides enhanced file and rebase stats required by modern userspace
+ * This syscall handles flag validation, AT_EMPTY_PATH fast routing,
+ * and passes the attributes to cp_statx
+ */
+ 
+SYSCALL_DEFINE5(statx,
+        int, dfd,
+        const char __user *, filename,
+        unsigned int, flags,
+        unsigned int, mask,
+        struct statx __user *, buffer)
+{
+    struct kstat stat;
+    struct path path;
+    int error;
+    unsigned int lookup_flags = 0;
+
+    /* reject invalid or unsupported flags */
+    if (flags & ~(AT_SYMLINK_NOFOLLOW | AT_NO_AUTOMOUNT | AT_EMPTY_PATH |
+                  AT_STATX_SYNC_TYPE))
+        return -EINVAL;
+
+    /* fast path: If filename is empty, use the file descriptor (dfd) directly */
+    if ((flags & AT_EMPTY_PATH) && strnlen_user(filename, 1) <= 1) {
+        struct fd f = fdget_raw(dfd);
+
+        if (!f.file)
+            return -EBADF;
+
+        error = vfs_getattr(&f.file->f_path, &stat);
+        if (!error)
+            error = cp_statx(&f.file->f_path, &stat, buffer, mask);
+
+        fdput(f);
+        return error;
+    }
+
+    /* translate statx flags to internal lookup flags */
+    if (!(flags & AT_SYMLINK_NOFOLLOW))
+        lookup_flags |= LOOKUP_FOLLOW;
+
+    if (flags & AT_EMPTY_PATH)
+        lookup_flags |= LOOKUP_EMPTY;
+
+    /* path lookup and stat extraction (with retry loop) */
+retry:
+    error = user_path_at(dfd, filename, lookup_flags, &path);
+    if (error)
+        return error;
+
+    error = vfs_getattr(&path, &stat);
+    if (!error)
+        error = cp_statx(&path, &stat, buffer, mask);
+
+    path_put(&path);
+
+    /* retry if the file handle is stale */
+    if (retry_estale(error, lookup_flags)) {
+        lookup_flags |= LOOKUP_REVAL;
+        goto retry;
+    }
+
+    return error;
+}

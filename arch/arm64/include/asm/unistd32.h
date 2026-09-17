@@ -793,3 +793,17 @@ __SYSCALL(__NR_seccomp, sys_seccomp)
 __SYSCALL(__NR_getrandom, sys_getrandom)
 #define __NR_memfd_create 385
 __SYSCALL(__NR_memfd_create, sys_memfd_create)
+
+__SYSCALL(386, sys_ni_syscall)
+__SYSCALL(387, sys_ni_syscall)
+__SYSCALL(388, sys_ni_syscall)
+__SYSCALL(389, sys_ni_syscall)
+__SYSCALL(390, sys_ni_syscall)
+__SYSCALL(391, sys_ni_syscall)
+__SYSCALL(392, sys_ni_syscall)
+__SYSCALL(393, sys_ni_syscall)
+__SYSCALL(394, sys_ni_syscall)
+__SYSCALL(395, sys_ni_syscall)
+__SYSCALL(396, sys_ni_syscall)
+#define __NR_statx 397
+__SYSCALL(__NR_statx, sys_statx)

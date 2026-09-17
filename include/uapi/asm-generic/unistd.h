@@ -711,6 +711,23 @@ __SYSCALL(__NR_memfd_create, sys_memfd_create)
 #undef __NR_syscalls
 #define __NR_syscalls 280
 
+__SYSCALL(280, sys_ni_syscall)
+__SYSCALL(281, sys_ni_syscall)
+__SYSCALL(282, sys_ni_syscall)
+__SYSCALL(283, sys_ni_syscall)
+__SYSCALL(284, sys_ni_syscall)
+__SYSCALL(285, sys_ni_syscall)
+__SYSCALL(286, sys_ni_syscall)
+__SYSCALL(287, sys_ni_syscall)
+__SYSCALL(288, sys_ni_syscall)
+__SYSCALL(289, sys_ni_syscall)
+__SYSCALL(290, sys_ni_syscall)
+#define __NR_statx 291
+__SYSCALL(__NR_statx, sys_statx)
+
+#undef __NR_syscalls
+#define __NR_syscalls 292
+
 /*
  * All syscalls below here should go away really,
  * these are provided for both review and as a porting

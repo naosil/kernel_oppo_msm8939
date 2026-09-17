@@ -390,6 +390,15 @@ asmlinkage long sys_lstat(const char __user *filename,
 			struct __old_kernel_stat __user *statbuf);
 asmlinkage long sys_fstat(unsigned int fd,
 			struct __old_kernel_stat __user *statbuf);
+
+/* 
+ * forward declaration and prototype for statx
+ */
+struct statx;
+asmlinkage long sys_statx(int dfd, const char __user *filename,
+              unsigned int flags, unsigned int mask,
+              struct statx __user *buffer);
+              
 asmlinkage long sys_newstat(const char __user *filename,
 				struct stat __user *statbuf);
 asmlinkage long sys_newlstat(const char __user *filename,
