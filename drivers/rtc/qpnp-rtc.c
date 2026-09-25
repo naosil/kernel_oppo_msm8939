@@ -584,6 +584,9 @@ static int qpnp_rtc_probe(struct spmi_device *spmi)
 
 	dev_set_drvdata(&spmi->dev, rtc_dd);
 
+    /* Enable wakealarm before registering RTC device */
+    device_init_wakeup(&spmi->dev, 1);
+
 	/* Register the RTC device */
 	rtc_dd->rtc = rtc_device_register("qpnp_rtc", &spmi->dev,
 						&qpnp_rtc_ops, THIS_MODULE);
@@ -603,7 +606,6 @@ static int qpnp_rtc_probe(struct spmi_device *spmi)
 		goto fail_req_irq;
 	}
 
-	device_init_wakeup(&spmi->dev, 1);
 	enable_irq_wake(rtc_dd->rtc_alarm_irq);
 
 	dev_dbg(&spmi->dev, "Probe success !!\n");
