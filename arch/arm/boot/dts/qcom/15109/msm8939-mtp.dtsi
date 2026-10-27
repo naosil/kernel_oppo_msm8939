@@ -95,6 +95,7 @@
 			st,g-range = <2>;
 			st,negate-x;
 			st,negate-z;
+			status = "disabled";
 		};
 
 		memsic@30 { /* Magnetic field sensor */
@@ -104,6 +105,7 @@
 			vio-supply = <&pm8916_l6>;
 			memsic,dir = "obverse-x-axis-leftward";
 			memsic,auto-report;
+			status = "disabled";
 		};
 
 		apds@53 { /* Ambient light and proximity sensor */
@@ -114,6 +116,7 @@
 			vdd-supply = <&pm8916_l17>;
 			vio-supply = <&pm8916_l6>;
 			apds,irq-gpio = <&msm_gpio 9 0x02>;
+			status = "disabled";
 		};
 	};
 
